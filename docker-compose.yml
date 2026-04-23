@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./backend
+      dockerfile: ../docker/php/Dockerfile
+    container_name: locadora-backend
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=locadora
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+      - REDIS_HOST=redis
+    depends_on:
+      - db
+      - redis
+    networks:
+      - locadora-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: locadora-nginx
+    restart: unless-stopped
+    ports:
+      - "8088:80"
+    volumes:
+      - ./backend:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - locadora-network
+
+  db:
+    image: postgres:15-alpine
+    container_name: locadora-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=locadora
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - locadora-network
+
+  redis:
+    image: redis:alpine
+    container_name: locadora-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - locadora-network
+
+networks:
+  locadora-network:
+    driver: bridge
+
+volumes:
+  db-data:

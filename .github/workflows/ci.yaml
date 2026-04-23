@@ -1,0 +1,70 @@
+name: Backend CI Pipeline
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, mbstring, exif, pcntl, bcmath, gd
+          coverage: xdebug
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: composer install --no-progress --prefer-dist --optimize-autoloader
+
+      - name: Setup Environment
+        working-directory: ./backend
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run Lint
+        working-directory: ./backend
+        run: vendor/bin/phpcs -n --standard=PSR12 app
+
+      - name: Run Tests
+        working-directory: ./backend
+        run: php artisan test --testsuite=Unit --coverage-text
+
+      - name: Build Artifact
+        working-directory: ./backend
+        run: tar -czf backend-build.tar.gz .
+
+  tag:
+    name: Generate Tag
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump version and push tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          custom_release_rules: |
+            feat:minor,
+            fix:patch,
+            docs:patch,
+            perf:minor,
+            refactor:patch
